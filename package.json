@@ -12,11 +12,13 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^3.43.0",
-    "body-parser": "^1.20.2",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "openai": "^4.13.0"
+  "@supabase/supabase-js": "^3.42.0",
+  "body-parser": "^1.20.2",
+  "dotenv": "^16.3.1",
+  "express": "^4.18.2",
+  "openai": "^4.13.0"
+}
+
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

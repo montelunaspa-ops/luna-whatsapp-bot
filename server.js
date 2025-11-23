@@ -1,117 +1,126 @@
 import express from "express";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
-import OpenAI from "openai";
-import { supabase } from "./supabaseClient.js";
+import { supabase } from "./supabase.js";
+import { catalogo } from "./catalogo.js";
+import { comunaValida, calcularTotal } from "./utils.js";
+import { generarRespuestaLuna } from "./lunaAI.js";
 
 dotenv.config();
 
 const app = express();
 app.use(bodyParser.json());
-
 const PORT = process.env.PORT || 3000;
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// --------------------------
-// FUNCIONES
-// --------------------------
-async function obtenerCatalogo() {
-  const { data, error } = await supabase.from("catalogo").select("*");
-  if (error) {
-    console.log("Error obteniendo catálogo:", error);
-    return "No se pudo cargar el catálogo.";
-  }
-
-  let texto = "📦 *Catálogo Delicias Monte Luna*\n\n";
-  for (const item of data) {
-    texto += `🍰 *${item.nombre}*\n${item.descripcion}\nPrecio: $${item.precio}\n\n`;
-  }
-
-  texto += `
-📌 *Despacho gratis sobre $14.990*.  
-Si no, tiene costo de $2.400.  
-Las entregas se realizan al día siguiente (excepto domingos).
-
-🚚 Comunas con despacho:
-Cerro Navia, Cerrillos, Conchalí, Estación Central, Independencia, Lo Prado, Lo Espejo (hasta Vespucio), Maipú (antes de Vespucio), Pedro Aguirre Cerda, Pudahuel, Quinta Normal, Recoleta, Renca, Santiago, San Miguel, San Joaquín.
-
-🏠 Dirección retiro: Chacabuco 1120, Santiago Centro (con agendamiento).
-`;
-  return texto;
-}
-
-// --------------------------
-// RUTAS
-// --------------------------
-app.get("/", (req, res) => {
-  res.send("Servidor funcionando correctamente 🚀");
-});
+// Simulamos base de estados de conversación
+const conversaciones = {}; 
 
 app.post("/whatsapp", async (req, res) => {
-  try {
-    const { from, message } = req.body;
-    if (!from || !message) {
-      return res.status(400).json({ error: "Faltan parámetros 'from' o 'message'" });
-    }
+  const { from, message } = req.body;
 
-    // Guardar o actualizar cliente
-    const { data: clienteExistente } = await supabase
+  // Obtener o crear cliente
+  let { data: cliente } = await supabase
+    .from("clientes")
+    .select("*")
+    .eq("whatsapp", from)
+    .single();
+
+  if (!cliente) {
+    const { data } = await supabase
       .from("clientes")
-      .select("*")
-      .eq("whatsapp", from)
+      .insert([{ whatsapp: from }])
+      .select()
       .single();
-
-    if (!clienteExistente) {
-      await supabase.from("clientes").insert({ whatsapp: from });
-    }
-
-    const catalogo = await obtenerCatalogo();
-
-    const sistema = `
-Eres *Luna*, asistente virtual de *Delicias Monte Luna*.
-Tu misión es guiar paso a paso al cliente, cerrar ventas y tomar pedidos completos.
-
-Reglas:
-1. Siempre envía el catálogo como primer mensaje.
-2. Pregunta la comuna y valida cobertura.
-3. Si no hay cobertura, ofrece retiro en Chacabuco 1120.
-4. Si hay cobertura, pregunta qué desea pedir y luego dirección, nombre, teléfono adicional.
-5. Calcula si la compra alcanza despacho gratis.
-6. Envía resumen final con total y datos del cliente.
-7. Finaliza con ✅ si se confirma el pedido.
-
-Catálogo:
-${catalogo}
-`;
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: sistema },
-        { role: "user", content: message }
-      ]
-    });
-
-    const respuesta = completion.choices[0].message.content;
-
-    await supabase.from("historial").insert({
-      whatsapp: from,
-      mensaje_cliente: message,
-      respuesta_luna: respuesta,
-      fecha: new Date().toISOString()
-    });
-
-    res.json({ reply: respuesta });
-  } catch (error) {
-    console.log("Error en /whatsapp:", error);
-    res.status(500).send("Error en el servidor");
+    cliente = data;
   }
+
+  // Inicializar conversación si no existe
+  if (!conversaciones[from]) {
+    conversaciones[from] = {
+      estado: "inicio",
+      pedido: [],
+      datosDespacho: {}
+    };
+  }
+
+  const conv = conversaciones[from];
+
+  // Flujo de estados
+  let respuesta = "";
+
+  switch (conv.estado) {
+    case "inicio":
+      respuesta = `¡Hola! Soy Luna 🤖. Te muestro nuestro catálogo:\n${catalogo}\n\nPara iniciar tu pedido, por favor dime tu comuna para validar despacho.`;
+      conv.estado = "validar_comuna";
+      break;
+
+    case "validar_comuna":
+      if (comunaValida(message)) {
+        conv.datosDespacho.comuna = message;
+        respuesta = `Perfecto, tu comuna está dentro de nuestra cobertura.\nAhora dime qué productos quieres pedir (puedes escribir varios, separados por comas).`;
+        conv.estado = "tomar_pedido";
+      } else {
+        respuesta = `Lo siento, no hacemos despacho a tu comuna. Puedes retirar tu pedido en Chacabuco 1120.`;
+        conv.estado = "inicio"; 
+      }
+      break;
+
+    case "tomar_pedido":
+      // Ejemplo: parsear pedido simple
+      // Aquí podemos mejorar para leer sabores, cantidades, porciones
+      const items = message.split(",").map(i => i.trim());
+      items.forEach(i => conv.pedido.push({ nombre: i, cantidad: 1, precio: 12000 })); // precio ejemplo
+      respuesta = `Entendido. Tu pedido parcial: ${items.join(", ")}.\nPor favor proporciona tu nombre completo para el despacho.`;
+      conv.estado = "datos_cliente";
+      break;
+
+    case "datos_cliente":
+      conv.datosDespacho.nombreCompleto = message;
+      respuesta = `Perfecto ${message}. Ahora dime tu dirección completa para despacho.`;
+      conv.estado = "direccion";
+      break;
+
+    case "direccion":
+      conv.datosDespacho.direccion = message;
+      // Calcular total
+      const totales = calcularTotal(conv.pedido);
+      conv.datosDespacho.total = totales.total;
+      respuesta = `Resumen de tu pedido:\nProductos: ${conv.pedido.map(p => p.nombre).join(", ")}\nTotal: $${totales.total}\nDirección: ${conv.datosDespacho.direccion}\nComuna: ${conv.datosDespacho.comuna}\n¿Todo correcto? (sí/no)`;
+      conv.estado = "confirmar";
+      break;
+
+    case "confirmar":
+      if (message.toLowerCase() === "sí" || message.toLowerCase() === "si") {
+        // Guardar pedido en Supabase
+        await supabase.from("pedidos").insert([{
+          whatsapp_cliente: from,
+          productos: conv.pedido,
+          total: conv.datosDespacho.total,
+          despacho: conv.datosDespacho.total >= 14990 ? 0 : 2400,
+          estado: "pendiente"
+        }]);
+        respuesta = `✅ Pedido confirmado. ¡Gracias por tu compra!`;
+      } else {
+        respuesta = `Pedido cancelado. Puedes iniciar un nuevo pedido cuando quieras.`;
+      }
+      conv.estado = "inicio";
+      conv.pedido = [];
+      conv.datosDespacho = {};
+      break;
+
+    default:
+      respuesta = "No entendí tu mensaje. Por favor empieza de nuevo.";
+      conv.estado = "inicio";
+  }
+
+  // Guardar historial
+  await supabase.from("historial").insert([
+    { whatsapp_cliente: from, mensaje_cliente: message, respuesta_luna: respuesta }
+  ]);
+
+  console.log(`Responder a ${from}: ${respuesta}`);
+
+  res.send({ status: "ok" });
 });
 
-// --------------------------
-// INICIAR SERVIDOR
-// --------------------------
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));

@@ -1,18 +1,19 @@
 {
   "name": "luna-whatsapp-bot",
   "version": "1.0.0",
+  "description": "Bot de WhatsApp para Delicias Monte Luna usando GPT-4o-mini",
   "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.84.0",
+    "@supabase/supabase-js": "^3.45.0",
     "body-parser": "^1.20.2",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "openai": "^4.9.0"
+    "openai": "^4.13.0"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=18.0.0"
   }
 }

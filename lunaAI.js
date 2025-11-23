@@ -1,10 +1,9 @@
-import OpenAI from "openai";
-import dotenv from "dotenv";
-dotenv.config();
+const OpenAI = require("openai");
+require("dotenv").config();
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function generarRespuestaLuna(historial, mensajeCliente) {
+async function generarRespuestaLuna(historial, mensajeCliente) {
   const prompt = `
 Eres Luna, vendedora de Delicias Monte Luna.
 Responde cordial y profesional.
@@ -19,3 +18,5 @@ Mensaje del cliente: ${mensajeCliente}
 
   return response.choices[0].message.content;
 }
+
+module.exports = { generarRespuestaLuna };

@@ -1,10 +1,13 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 require("dotenv").config();
-const { supabase } = require("./supabase");
-const { catalogo } = require("./catalogo");
-const { comunaValida, calcularTotal } = require("./utils");
-const { generarRespuestaLuna } = require("./lunaAI");
+const path = require("path");
+
+// Rutas absolutas usando __dirname
+const { supabase } = require(path.join(__dirname, "supabase"));
+const { catalogo } = require(path.join(__dirname, "catalogo"));
+const { comunaValida, calcularTotal } = require(path.join(__dirname, "utils"));
+const { generarRespuestaLuna } = require(path.join(__dirname, "lunaAI"));
 
 const app = express();
 app.use(bodyParser.json());

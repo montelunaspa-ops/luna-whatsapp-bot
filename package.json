@@ -1,7 +1,7 @@
 {
   "name": "luna-whatsapp-bot",
   "version": "1.0.0",
-  "description": "Bot Luna WhatsApp - CommonJS para Render",
+  "description": "Bot Luna WhatsApp - listo para Render con __dirname",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

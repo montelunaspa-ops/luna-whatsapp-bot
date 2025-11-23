@@ -1,12 +1,10 @@
-import express from "express";
-import bodyParser from "body-parser";
-import dotenv from "dotenv";
-import { supabase } from "./supabase.js";
-import { catalogo } from "./catalogo.js";
-import { comunaValida, calcularTotal } from "./utils.js";
-import { generarRespuestaLuna } from "./lunaAI.js";
-
-dotenv.config();
+const express = require("express");
+const bodyParser = require("body-parser");
+require("dotenv").config();
+const { supabase } = require("./supabase");
+const { catalogo } = require("./catalogo");
+const { comunaValida, calcularTotal } = require("./utils");
+const { generarRespuestaLuna } = require("./lunaAI");
 
 const app = express();
 app.use(bodyParser.json());
@@ -17,7 +15,6 @@ const conversaciones = {}; // Manejo simple de estados
 app.post("/whatsapp", async (req, res) => {
   const { from, message } = req.body;
 
-  // Obtener o crear cliente
   let { data: cliente } = await supabase
     .from("clientes")
     .select("*")

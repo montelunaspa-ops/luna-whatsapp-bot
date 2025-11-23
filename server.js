@@ -1,8 +1,9 @@
+// server.js
 import express from "express";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import OpenAI from "openai";
-import { supabase } from "./supabaseClient.js";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
@@ -11,14 +12,20 @@ app.use(bodyParser.json());
 
 const PORT = process.env.PORT || 3000;
 
+// Inicializamos OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Inicializamos Supabase
+export const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
 // --------------------------
-// FUNCIONES
+// Función para obtener catálogo
 // --------------------------
 async function obtenerCatalogo() {
   const { data, error } = await supabase.from("catalogo").select("*");
-
   if (error) {
     console.log("Error obteniendo catálogo:", error);
     return "No se pudo cargar el catálogo.";
@@ -45,26 +52,32 @@ Cerro Navia, Cerrillos, Conchalí, Estación Central, Independencia, Lo Prado, L
 }
 
 // --------------------------
-// RUTAS
+// Ruta principal
 // --------------------------
 app.get("/", (req, res) => {
   res.send("Servidor funcionando correctamente 🚀");
 });
 
+// --------------------------
+// Ruta WhatsAuto
+// --------------------------
 app.post("/whatsapp", async (req, res) => {
   try {
-    const { from, message } = req.body;
+    // WhatsAuto envía normalmente "sender" y "message" o "text"
+    const from = req.body.sender || req.body.from;
+    const message = req.body.message || req.body.text;
 
-    // Validar cliente
-    const { data: clienteExistente, error: errorCliente } = await supabase
+    if (!from || !message) {
+      return res.json({ reply: "No se pudo leer el mensaje." });
+    }
+
+    // Verificar si el cliente ya existe
+    const { data: clienteExistente } = await supabase
       .from("clientes")
       .select("*")
       .eq("whatsapp", from)
-      .maybeSingle();
-
-    if (errorCliente) {
-      console.log("Error al consultar cliente:", errorCliente);
-    }
+      .single()
+      .catch(() => ({ data: null }));
 
     if (!clienteExistente) {
       await supabase.from("clientes").insert({ whatsapp: from });
@@ -73,22 +86,21 @@ app.post("/whatsapp", async (req, res) => {
     // Obtener catálogo
     const catalogo = await obtenerCatalogo();
 
-    // Prompt para GPT
+    // Crear prompt para GPT
     const sistema = `
 Eres *Luna*, asistente virtual de *Delicias Monte Luna*.
-Tu misión es guiar paso a paso al cliente, cerrar ventas y tomar pedidos completos.
+Guía al cliente paso a paso para tomar pedidos completos.
 
-Reglas de operación:
-1. Siempre envía el catálogo como primer mensaje de bienvenida.
-2. Pregunta la comuna del despacho y valida cobertura.
-3. Si no hay cobertura, ofrece retiro en dirección: Chacabuco 1120, Santiago Centro.
-4. Si hay cobertura, pregunta qué desea pedir y luego dirección, nombre, teléfono adicional.
-5. Calcula si la compra alcanza despacho gratis y agrega costo si no.
-6. Envía resumen final con total del pedido, despacho y datos del cliente.
-7. Finaliza con ✅ si se confirma el pedido.
-8. No compartas datos bancarios.
+Flujo:
+1. Saluda y envía el catálogo completo como primer mensaje.
+2. Pregunta la comuna de despacho y valida cobertura.
+3. Si no hay cobertura, ofrece retiro en nuestra dirección.
+4. Si hay cobertura, pide pedido, dirección, nombre y teléfono adicional.
+5. Calcula despacho gratis o agrega costo según corresponda.
+6. Envía resumen final con total y datos de cliente.
+7. Finaliza con ✅ si el pedido se confirma.
 
-Catálogo completo:
+Catálogo:
 ${catalogo}
 `;
 
@@ -97,13 +109,13 @@ ${catalogo}
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: sistema },
-        { role: "user", content: message || "" }
+        { role: "user", content: message }
       ]
     });
 
-    const respuesta = completion.choices[0].message?.content || "Lo siento, no pude procesar tu mensaje.";
+    const respuesta = completion.choices[0].message?.content || "Lo siento, hubo un error.";
 
-    // Guardar conversación en historial
+    // Guardar historial
     await supabase.from("historial").insert({
       whatsapp: from,
       mensaje_cliente: message,
@@ -120,7 +132,7 @@ ${catalogo}
 });
 
 // --------------------------
-// INICIAR SERVIDOR
+// Iniciar servidor
 // --------------------------
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);

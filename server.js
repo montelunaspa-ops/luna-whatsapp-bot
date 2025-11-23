@@ -12,8 +12,7 @@ const app = express();
 app.use(bodyParser.json());
 const PORT = process.env.PORT || 3000;
 
-// Simulamos base de estados de conversación
-const conversaciones = {}; 
+const conversaciones = {}; // Manejo simple de estados
 
 app.post("/whatsapp", async (req, res) => {
   const { from, message } = req.body;
@@ -34,55 +33,45 @@ app.post("/whatsapp", async (req, res) => {
     cliente = data;
   }
 
-  // Inicializar conversación si no existe
   if (!conversaciones[from]) {
-    conversaciones[from] = {
-      estado: "inicio",
-      pedido: [],
-      datosDespacho: {}
-    };
+    conversaciones[from] = { estado: "inicio", pedido: [], datosDespacho: {} };
   }
 
   const conv = conversaciones[from];
-
-  // Flujo de estados
   let respuesta = "";
 
   switch (conv.estado) {
     case "inicio":
-      respuesta = `¡Hola! Soy Luna 🤖. Te muestro nuestro catálogo:\n${catalogo}\n\nPara iniciar tu pedido, por favor dime tu comuna para validar despacho.`;
+      respuesta = `¡Hola! Soy Luna 🤖. Te muestro nuestro catálogo:\n${catalogo}\n\nPara iniciar tu pedido, dime tu comuna.`;
       conv.estado = "validar_comuna";
       break;
 
     case "validar_comuna":
       if (comunaValida(message)) {
         conv.datosDespacho.comuna = message;
-        respuesta = `Perfecto, tu comuna está dentro de nuestra cobertura.\nAhora dime qué productos quieres pedir (puedes escribir varios, separados por comas).`;
+        respuesta = `Perfecto, tu comuna está cubierta.\nAhora dime qué productos quieres pedir.`;
         conv.estado = "tomar_pedido";
       } else {
-        respuesta = `Lo siento, no hacemos despacho a tu comuna. Puedes retirar tu pedido en Chacabuco 1120.`;
-        conv.estado = "inicio"; 
+        respuesta = `Lo siento, no hacemos despacho a tu comuna. Puedes retirar en Chacabuco 1120.`;
+        conv.estado = "inicio";
       }
       break;
 
     case "tomar_pedido":
-      // Ejemplo: parsear pedido simple
-      // Aquí podemos mejorar para leer sabores, cantidades, porciones
       const items = message.split(",").map(i => i.trim());
-      items.forEach(i => conv.pedido.push({ nombre: i, cantidad: 1, precio: 12000 })); // precio ejemplo
-      respuesta = `Entendido. Tu pedido parcial: ${items.join(", ")}.\nPor favor proporciona tu nombre completo para el despacho.`;
+      items.forEach(i => conv.pedido.push({ nombre: i, cantidad: 1, precio: 12000 }));
+      respuesta = `Entendido. Pedido parcial: ${items.join(", ")}.\nPor favor dime tu nombre completo.`;
       conv.estado = "datos_cliente";
       break;
 
     case "datos_cliente":
       conv.datosDespacho.nombreCompleto = message;
-      respuesta = `Perfecto ${message}. Ahora dime tu dirección completa para despacho.`;
+      respuesta = `Perfecto ${message}. Ahora dime tu dirección completa.`;
       conv.estado = "direccion";
       break;
 
     case "direccion":
       conv.datosDespacho.direccion = message;
-      // Calcular total
       const totales = calcularTotal(conv.pedido);
       conv.datosDespacho.total = totales.total;
       respuesta = `Resumen de tu pedido:\nProductos: ${conv.pedido.map(p => p.nombre).join(", ")}\nTotal: $${totales.total}\nDirección: ${conv.datosDespacho.direccion}\nComuna: ${conv.datosDespacho.comuna}\n¿Todo correcto? (sí/no)`;
@@ -90,8 +79,7 @@ app.post("/whatsapp", async (req, res) => {
       break;
 
     case "confirmar":
-      if (message.toLowerCase() === "sí" || message.toLowerCase() === "si") {
-        // Guardar pedido en Supabase
+      if (["sí", "si"].includes(message.toLowerCase())) {
         await supabase.from("pedidos").insert([{
           whatsapp_cliente: from,
           productos: conv.pedido,
@@ -113,7 +101,6 @@ app.post("/whatsapp", async (req, res) => {
       conv.estado = "inicio";
   }
 
-  // Guardar historial
   await supabase.from("historial").insert([
     { whatsapp_cliente: from, mensaje_cliente: message, respuesta_luna: respuesta }
   ]);

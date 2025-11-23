@@ -2,7 +2,7 @@ export const comunasCubiertas = {
   "Cerro Navia": "11–13 hrs",
   "Cerrillos": "11–13 hrs",
   "Conchalí": "12–14 hrs"
-  // Agrega las demás comunas según tu lista
+  // Agrega el resto de comunas
 };
 
 export function comunaValida(comuna) {

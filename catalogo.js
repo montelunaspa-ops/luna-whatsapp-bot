@@ -1,4 +1,4 @@
-export const catalogo = `
+const catalogo = `
 📋 *Catálogo Delicias Monte Luna*
 
 🎂 Queques Peruanos 28cm:
@@ -23,3 +23,5 @@ export const catalogo = `
 - Gratis sobre $14.990, si no $2.400
 - Retiro: Chacabuco 1120, Santiago Centro (con agendamiento)
 `;
+
+module.exports = { catalogo };
